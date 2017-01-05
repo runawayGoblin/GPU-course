@@ -1,0 +1,3 @@
+﻿kernel.cu.obj : error LNK2019: unresolved external symbol "public: __thiscall HighPrecisionTime::HighPrecisionTime(void)" (??0HighPrecisionTime@@QAE@XZ) referenced in function _main
+kernel.cu.obj : error LNK2019: unresolved external symbol "public: double __thiscall HighPrecisionTime::TimeSinceLastCall(void)" (?TimeSinceLastCall@HighPrecisionTime@@QAENXZ) referenced in function _main
+C:\Users\educ\Documents\Visual Studio 2015\Projects\timer\Debug\timer.exe : fatal error LNK1120: 2 unresolved externals
