@@ -15,12 +15,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\..\..\Desktop\GPU-course-master\highPerTimer\HighPerfTimer.cpp">
+    <ClCompile Include="..\..\highPerTimer\HighPerfTimer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\..\..\Desktop\GPU-course-master\highPerTimer\HighPerfTimer.h">
+    <ClInclude Include="..\..\highPerTimer\HighPerfTimer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
