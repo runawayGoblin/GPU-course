@@ -1,4 +1,4 @@
-Identity=..\..\..\..\..\Desktop\GPU-course-master\timerTest\kernel.cu
+Identity=..\..\timerTest\kernel.cu
 AdditionalCompilerOptions=
 AdditionalCompilerOptions=
 AdditionalDependencies=

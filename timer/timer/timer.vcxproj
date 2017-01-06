@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="..\..\..\..\..\Desktop\GPU-course-master\timerTest\kernel.cu" />
+    <CudaCompile Include="..\..\timerTest\kernel.cu" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{FE629E3C-E59B-4E33-9934-C0A1D7565FA7}</ProjectGuid>
