@@ -1,1 +1,2 @@
-﻿LINK : fatal error LNK1561: entry point must be defined
+﻿  HighPerfTimer.cpp
+  Project1.vcxproj -> C:\Users\educ\Desktop\GPU-course\timer\Release\HighPerfTimer.lib

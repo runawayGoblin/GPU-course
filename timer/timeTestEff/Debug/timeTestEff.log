@@ -1,4 +1,20 @@
-﻿  timeTestEff.vcxproj -> C:\Users\educ\Desktop\GPU-course\timer\Debug\timeTestEff.exe
+﻿  Compiling CUDA source file kernal.cu...
+  
+  C:\Users\educ\Desktop\GPU-course\timer\timeTestEff>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\bin\nvcc.exe" -gencode=arch=compute_20,code=\"sm_20,compute_20\" --use-local-env --cl-version 2015 -ccbin "C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\bin"  -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include" -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include"  -G   --keep-dir Debug -maxrregcount=0  --machine 32 --compile -cudart static  -g   -DWIN32 -D_DEBUG -D_CONSOLE -D_MBCS -Xcompiler "/EHsc /W3 /nologo /Od /FS /Zi /RTC1 /MDd " -o Debug\kernal.cu.obj "C:\Users\educ\Desktop\GPU-course\timer\timeTestEff\kernal.cu" 
+C:/Users/educ/Desktop/GPU-course/timer/timeTestEff/kernal.cu(80): warning : variable "gpuProps" is used before its value is set
+C:/Users/educ/Desktop/GPU-course/timer/timeTestEff/kernal.cu(25): warning : variable "rep" was declared but never referenced
+C:/Users/educ/Desktop/GPU-course/timer/timeTestEff/kernal.cu(45): warning : variable "gpuStatus" was set but never used
+C:/Users/educ/Desktop/GPU-course/timer/timeTestEff/kernal.cu(80): warning : variable "gpuProps" is used before its value is set
+C:/Users/educ/Desktop/GPU-course/timer/timeTestEff/kernal.cu(25): warning : variable "rep" was declared but never referenced
+C:/Users/educ/Desktop/GPU-course/timer/timeTestEff/kernal.cu(45): warning : variable "gpuStatus" was set but never used
+CUDACOMPILE : nvcc warning : The 'compute_20', 'sm_20', and 'sm_21' architectures are deprecated, and may be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+  kernal.cu
+C:/Users/educ/Desktop/GPU-course/timer/timeTestEff/kernal.cu(21): warning C4244: 'argument': conversion from 'time_t' to 'unsigned int', possible loss of data
+C:/Users/educ/Desktop/GPU-course/timer/timeTestEff/kernal.cu(227): warning C4101: 'errNum': unreferenced local variable
+c:\users\educ\desktop\gpu-course\timer\timetesteff\kernal.cu(80): warning C4700: uninitialized local variable 'gpuProps' used
+  plsWork.cpp
+  LINK : C:\Users\educ\Desktop\GPU-course\timer\Debug\timeTestEff.exe not found or not built by the last incremental link; performing full link
+  timeTestEff.vcxproj -> C:\Users\educ\Desktop\GPU-course\timer\Debug\timeTestEff.exe
   timeTestEff.vcxproj -> C:\Users\educ\Desktop\GPU-course\timer\Debug\timeTestEff.pdb (Full PDB)
   copy "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\bin\cudart*.dll" "C:\Users\educ\Desktop\GPU-course\timer\Debug\"
   C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\bin\cudart32_80.dll

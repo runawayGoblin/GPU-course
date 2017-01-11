@@ -10,38 +10,46 @@
 typedef unsigned int ArrType_t;
 using namespace std;
 
-bool initialize(ArrType_t**a, ArrType_t**b, ArrType_t**c, int arrSize); // this is where we initilize the three arrays on the cpu's memory
-void clean(ArrType_t*a, ArrType_t*b, ArrType_t*c); // this is where we delete the arrays on the cpu's memory
-void fillArr(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize);
-void addVector(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize);
-
+bool initializeCpu(ArrType_t**a, ArrType_t**b, ArrType_t**c, int arrSize); // this is where we initilize the three arrays on the cpu's memory
+void cleanCpu(ArrType_t*a, ArrType_t*b, ArrType_t*c); // this is where we delete the arrays on the cpu's memory
+void cleanGpu(ArrType_t*a, ArrType_t*b, ArrType_t*c);//free the gpu memory
+void fillCPUArr(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize);
+void addCPUVector(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize);
+cudaError_t cudaSetMalloc(ArrType_t**a, ArrType_t**b, ArrType_t**c, unsigned int arrSize, cudaDeviceProp * devProps);
 int main(int argc, char* argv[]){
 	//seed random number generator for unique numbers
 	srand(time(NULL));
 
 
 	int size = 1000; // this is the default array size, if the user does not enter their own
+	int rep = 100;// how many times to loop 
+	
 	cout << argc << endl;
 	cout << argv[0] << endl;
+	//create 3 int pointers on cpu and 3 on gpu
+	ArrType_t *cpu_a = nullptr;
+	ArrType_t *cpu_b = nullptr;
+	ArrType_t *cpu_c = nullptr;
+
+	ArrType_t *gpu_a = nullptr;
+	ArrType_t *gpu_b = nullptr;
+	ArrType_t *gpu_c = nullptr;
+
+	cudaError_t gpuStatus = cudaSuccess;
+	cudaDeviceProp gpuProps;
 
 	if (argc > 1) {// check to see if the user entered a size of their own array
-
 		size = stoi(argv[1]); // change default size to user specified size
 		//cout << stoi(argv[1]) <<endl; //??IS NEEDED??check to make sure the size was changed 
 	}
 	cout << "array is of size " << size << endl; //check to make sure the size was changed,=
 
-	//create 3 int pointers
-	ArrType_t *a = nullptr;
-	ArrType_t *b = nullptr;
-	ArrType_t *c = nullptr;
-
-
+	
 	//TRY
 	try{
-
+		//CPU TEST
 		//allocate memory for the pointers of the user specified size
-		bool init = initialize(&a, &b, &c, size); //a bool is set to this so we know if the outcome worked or not
+		bool init = initializeCpu(&cpu_a, &cpu_b, &cpu_c, size); //a bool is set to this so we know if the outcome worked or not
 		if (init) {
 			cout << "looking good" << endl; // memory was allocated correctly
 		}
@@ -49,45 +57,48 @@ int main(int argc, char* argv[]){
 			throw("Initilaizing failed");//send this error message to catch block
 		}
 		
-		/*
-		//TEST TO MAKE SURE THE FUNCTION WORK
-		fillArr(a, b, c, size);// initialize the arrays
-		addVector(a, b, c, size); // add a and b into c
-
-		for (int i = 0; i < size; i++) {// loop through and reveal answer
-			cout << a[i] << " + " << b[i] << " = " << c[i] << endl;
-		}*/
-
 		//initialize timer, and the sum of the results
-		double sum = 0.0; // keeping a running timer of a sum, so averaging will be super easy
+		double cpuRunSum = 0.0; // keeping a running timer of a sum for the cpu, so averaging will be super easy
 		HighPrecisionTime hpt;//instance of timer
 		hpt.TimeSinceLastCall();//call it for the first time to start it
 
-		for (int i = 0; i < 100; i++) {
-			//fill values in the pointers
-			fillArr(a, b, c, size);
-			addVector(a, b, c, size);
-			sum = sum + hpt.TimeSinceLastCall();
+		for (int i = 0; i < 100; i++) {//loop through and 
+			//fill values in the pointers and 
+			fillCPUArr(cpu_a, cpu_b, cpu_c, size);
+			addCPUVector(cpu_a, cpu_b, cpu_c, size);
+			cpuRunSum += hpt.TimeSinceLastCall();
 		}
+		//average the sum of each cpu run
+		double cpuRunAvg = cpuRunSum / 100;
+		cout << "Average time for filling arrays a and b then adding into c is " << cpuRunAvg << " ticks per second" << endl;
+
+
+		//GPU TEST
+
+				
+											 
+		//set dev and malloc arrs
+		gpuStatus = cudaSetMalloc(&gpu_a, &gpu_b, &gpu_c,size, &gpuProps);//set it up
+
+		//start timer for copy time from CPU to GPU
 		
-		//average the sum
-		double avg = sum / 100;
+		//copy arrays and end timer
 
-		cout << "Average time for filling arrays a and b then adding into c is " << avg << " ticks per second" << endl;
+		//start timer and runing sum for gpu test timing 
 
-		////Test to see if the arrays filled, print each out
-		//for (int j = 0; j < size; j++) {
-		//	cout << "a[" << j << "] = " << a[j] << endl;
-		//	cout << "b[" << j << "] = " << b[j] << endl;
-		//	cout << "c[" << j << "] = " << c[j] << endl;
-		//}
-		//
+		//loop through and add rep times
 
+		//stop timer, find average
+		
+		//start timer for copy c time
+		
+		//copy c back to cpu and endtimer
 
 	}//CATCH
 	catch(char * errMessage){ 
-		cout << "Error: " << errMessage;
-		clean(a, b, c);
+		cout << "Error: " << errMessage <<endl;
+		cleanCpu(cpu_a, cpu_b, cpu_c);
+		cleanGpu(gpu_a, gpu_b, gpu_c);
 	}
 	
 
@@ -95,14 +106,14 @@ int main(int argc, char* argv[]){
 
 
 	//clean CPU at end, I assume this will move to an earlier part of the program when we get to cuda 
-	clean(a, b, c);
-
+	cleanCpu(cpu_a, cpu_b, cpu_c);
+	cleanGpu(gpu_a, gpu_b, gpu_c);
 	system("pause");
 	return 0;
 
 }
 
-bool initialize(ArrType_t**a, ArrType_t**b, ArrType_t**c, int arrSize) {
+bool initializeCpu(ArrType_t**a, ArrType_t**b, ArrType_t**c, int arrSize) {
 	bool retval = true;
 
 	int sizeType = sizeof(ArrType_t);
@@ -117,28 +128,42 @@ bool initialize(ArrType_t**a, ArrType_t**b, ArrType_t**c, int arrSize) {
 			
 	return retval;
 }
-void clean(ArrType_t* a, ArrType_t* b, ArrType_t*c) {
+void cleanCpu(ArrType_t* a, ArrType_t* b, ArrType_t*c) {
 	
 	if (a != nullptr) {
 		free(a);
 		a = nullptr;
-		cout << "a was freed form CPU" << endl;
+		cout << "cpu_a was freed form CPU" << endl;
 	}
 
 	if (b != nullptr) {
 		free(b);
 		b = nullptr;
-		cout << "b was freed from CPU" << endl;
+		cout << "cpu_b was freed from CPU" << endl;
 	}
 
 	if (c != nullptr) {
 		free(c);
 		c = nullptr;
-		cout << "c was freed from CPU" << endl;
+		cout << "cpu_c was freed from CPU" << endl;
 	}
 
 }
-void fillArr(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize) {
+void cleanGpu(ArrType_t* a, ArrType_t* b, ArrType_t*c) {
+
+	cudaFree(&a);
+	a = nullptr;
+	cout << "gpu_a was freed form GPU?" << endl;
+	
+	cudaFree(&b);
+	b = nullptr;
+	cout << "gpu_b was freed from GPU?" << endl;
+
+	cudaFree(&c);
+	c = nullptr;
+	cout << "gpu_c was freed from GPU?" << endl;
+}
+void fillCPUArr(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize) {
 
 //#pragma omp parallel for
 
@@ -149,10 +174,66 @@ void fillArr(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize) {
 	}
 
 }
-void addVector(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize) {
+void addCPUVector(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize) {
 
 	for (int i = 0; i < arrSize; i++) {
 		c[i] = a[i] + b[i];
 	}
 
+}
+cudaError_t cudaSetMalloc(ArrType_t**gpu_a, ArrType_t**gpu_b, ArrType_t**gpu_c, unsigned int arrSize, cudaDeviceProp * devProp) {
+
+	//initialize variables
+
+	int mallocSize = arrSize * sizeof(ArrType_t);// make malloc easier to read, and to type
+	cudaError_t cudaStatus; //holds 'cudaSuccess' or other to tell wether the cuda call worked or not.
+	try {
+		//set cuda device
+		cudaStatus = cudaSetDevice(0); //use 0 bc we only have one graphics card 
+		if (cudaStatus != cudaSuccess) // if the device did not set
+		{//print error, and free gpu ptrs
+			cout << "cudaSetDevice has failed" << endl;
+			throw(1);
+		}
+		cudaStatus = cudaGetDeviceProperties(devProp, 0); //??? get props from gpu 0
+		if (cudaStatus != cudaSuccess) {
+			cout << "cudaGetDeviceProperties failed" << endl;
+		}
+		cout <<endl<< "cudaGetDeviceProperties worked" << endl;
+		//cuda malloc a, b, c
+		//a
+		cudaStatus = cudaMalloc((void**)&gpu_a, mallocSize);
+		if (cudaStatus != cudaSuccess) {
+			cout << "cudaMalloc gpu_a failed" << endl;
+			throw(1);
+		}
+		cout << "gpu_ a was allocated" << endl;
+		//b
+		cudaStatus = cudaMalloc((void**)&gpu_b, mallocSize);
+		if (cudaStatus != cudaSuccess) {
+			cout << "cudaMalloc gpu_b failed" << endl;
+			throw(1);
+		}
+		cout << "gpu_b was allocated" << endl;
+		//c
+		cudaStatus = cudaMalloc((void**)&gpu_c, mallocSize);
+		if (cudaStatus != cudaSuccess) {
+			cout << "cudaMalloc gpu_c failed" << endl;
+			throw(1);
+		}
+		cout << "gpu_c was allocated" << endl << endl;
+		//DIFFernt function for coppy and kernel call and stuff bc that's timed
+		//this is the end of the function
+	}
+	catch (int errNum) {//free the memory bc something didn't work
+		cudaFree(gpu_a);
+		cout << "gpu_a was freed" << endl;
+		cudaFree(gpu_b);
+		cout << "gpu_b was freed" << endl;
+		cudaFree(gpu_c);
+		cout << "gpu_c was freed" << endl;
+	}
+
+
+return cudaStatus;
 }
