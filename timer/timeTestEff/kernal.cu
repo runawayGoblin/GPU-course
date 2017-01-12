@@ -15,6 +15,7 @@ void cleanCpu(ArrType_t*a, ArrType_t*b, ArrType_t*c); // this is where we delete
 void cleanGpu(ArrType_t*a, ArrType_t*b, ArrType_t*c);//free the gpu memory
 void fillCPUArr(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize);
 void addCPUVector(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize);
+cudaError_t copyToGpu(ArrType_t *cpu, ArrType_t *gpu, int arrSize);
 cudaError_t cudaSetMalloc(ArrType_t**a, ArrType_t**b, ArrType_t**c, unsigned int arrSize, cudaDeviceProp * devProps);
 int main(int argc, char* argv[]){
 	//seed random number generator for unique numbers
@@ -22,7 +23,7 @@ int main(int argc, char* argv[]){
 
 
 	int size = 1000; // this is the default array size, if the user does not enter their own
-	int rep = 100;// how many times to loop 
+	int reps = 100;// how many times to loop 
 	
 	cout << argc << endl;
 	cout << argv[0] << endl;
@@ -62,7 +63,7 @@ int main(int argc, char* argv[]){
 		HighPrecisionTime hpt;//instance of timer
 		hpt.TimeSinceLastCall();//call it for the first time to start it
 
-		for (int i = 0; i < 100; i++) {//loop through and 
+		for (int i = 0; i < reps; i++) {//loop through and 
 			//fill values in the pointers and 
 			fillCPUArr(cpu_a, cpu_b, cpu_c, size);
 			addCPUVector(cpu_a, cpu_b, cpu_c, size);
@@ -81,7 +82,17 @@ int main(int argc, char* argv[]){
 		gpuStatus = cudaSetMalloc(&gpu_a, &gpu_b, &gpu_c,size, &gpuProps);//set it up
 
 		//start timer for copy time from CPU to GPU
-		
+		double gpuTime = hpt.TimeSinceLastCall();
+
+		gpuStatus = copyToGpu(cpu_a, gpu_b, size);
+		if (gpuStatus != cudaSuccess) {
+			throw("copying a to gpu failed");
+		}
+		cout << "copied to a to gpu" << endl;
+		if (!copyToGpu(cpu_b, gpu_c, size)) {
+			throw("copying b to gpu failed");
+		}
+		cout << "copied b to gpu" << endl << endl;
 		//copy arrays and end timer
 
 		//start timer and runing sum for gpu test timing 
@@ -145,7 +156,7 @@ void cleanCpu(ArrType_t* a, ArrType_t* b, ArrType_t*c) {
 	if (c != nullptr) {
 		free(c);
 		c = nullptr;
-		cout << "cpu_c was freed from CPU" << endl;
+		cout << "cpu_c was freed from CPU" << endl << endl;;
 	}
 
 }
@@ -153,15 +164,15 @@ void cleanGpu(ArrType_t* a, ArrType_t* b, ArrType_t*c) {
 
 	cudaFree(&a);
 	a = nullptr;
-	cout << "gpu_a was freed form GPU?" << endl;
+	cout << "gpu_a was freed form GPU" << endl;
 	
 	cudaFree(&b);
 	b = nullptr;
-	cout << "gpu_b was freed from GPU?" << endl;
+	cout << "gpu_b was freed from GPU" << endl;
 
 	cudaFree(&c);
 	c = nullptr;
-	cout << "gpu_c was freed from GPU?" << endl;
+	cout << "gpu_c was freed from GPU" << endl << endl;
 }
 void fillCPUArr(ArrType_t*a, ArrType_t*b, ArrType_t*c, int arrSize) {
 
@@ -236,4 +247,12 @@ cudaError_t cudaSetMalloc(ArrType_t**gpu_a, ArrType_t**gpu_b, ArrType_t**gpu_c, 
 
 
 return cudaStatus;
+}
+cudaError_t copyToGpu(ArrType_t *cpu, ArrType_t *gpu, int arrSize) {
+	cudaError_t retVal = cudaSuccess;
+	int memSize = arrSize * sizeof(ArrType_t);
+
+	retVal = cudaMemcpy(cpu, gpu, memSize, cudaMemcpyHostToDevice);
+	
+	return retVal;
 }
