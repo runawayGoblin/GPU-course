@@ -9,7 +9,11 @@
 using namespace cv;
 using namespace std;
 
-void Threshold(int threshold, int width, int height, unsigned char* data);
+void CpuThreshold(int threshold, int width, int height, unsigned char* data);
+cudaError_t mallocGPU(unsigned char** orig, unsigned char** modif, int width, int height);
+void cleanGPU(unsigned char** orig, unsigned char**);
+cudaError_t copyToGPU(unsigned char* gpuData, unsigned char* cpuData, int width, int height);
+
 
 int main(int argc, char** argv) {
 	
@@ -17,29 +21,50 @@ int main(int argc, char** argv) {
 		cout << "usage: display_image ImageToLoadAndDisplay" << endl;
 	}
 
-	Mat image;
-	image = imread(argv[1], CV_LOAD_IMAGE_COLOR);
+	Mat cpuOriginalImage;
+	cpuOriginalImage = imread(argv[1], CV_LOAD_IMAGE_COLOR);
+	cvtColor(cpuOriginalImage, cpuOriginalImage, COLOR_RGB2GRAY);
 
-	cvtColor(image, image, COLOR_RGB2GRAY);
-
-	cout << "Number of channels: " << image.channels() << endl;
-	if (!image.data) {
+	cout << "Number of channels: " << cpuOriginalImage.channels() << endl;
+	if (!cpuOriginalImage.data) {
 		cout << "could not open or find the image" << std::endl;
 	}
-	int height = image.rows;
-	int width = image.cols;
+	int height = cpuOriginalImage.rows;
+	int width = cpuOriginalImage.cols;
 	int threshold = 128;
 
-	Threshold(threshold, width, height, image.data);
+	//declare vairables to put the data into
+	//Mat.data returns a pointer to an unsighned character array
+	unsigned char * gpuOriginalImage=0;
+	unsigned char * gpuModifiedImage=0;
+		
+	CpuThreshold(threshold, width, height, cpuOriginalImage.data);
+	cout << "CpuThreshold was a success" << endl << endl;
+	try {
+		cudaError_t gpuStatus = mallocGPU(&gpuOriginalImage, &gpuModifiedImage, width, height);
+		if (gpuStatus != cudaSuccess) {
+			throw("Malloc GPU Failed");
+		}
+		cout << "CpuThreshold was a success" << endl << endl;
 
-	namedWindow("Display Window", WINDOW_NORMAL);
-	imshow("Display Window", image);
+		gpuStatus = copyToGPU(gpuOriginalImage, cpuOriginalImage.data, width, height);
+		if (gpuStatus != cudaSuccess) {
+			throw("Copy to GPU Failed");
+		}
+	}
+	catch (char* errMsg) {
+		cout << "Error: " << errMsg << endl;
+		cleanGPU(&gpuOriginalImage, &gpuModifiedImage);
+	}
+
+	//namedWindow("Display Window", WINDOW_NORMAL);
+	//imshow("Display Window", cpuOriginalImage);
 
 
 	waitKey(0);
 	return 0;
 }
-void Threshold(int threshold, int width, int height, unsigned char* data) {
+void CpuThreshold(int threshold, int width, int height, unsigned char* data) {
 
 	unsigned char* endArr = data + (width *height);
 	//loop through data 
@@ -54,4 +79,63 @@ void Threshold(int threshold, int width, int height, unsigned char* data) {
 		
 	}
 
+}
+
+
+cudaError_t mallocGPU(unsigned char** orig, unsigned char** modif, int width, int height) {
+	
+	//variables for the malloccing 
+	cudaError_t gpuStatus = cudaSuccess;
+	int mallocSize = width * height * sizeof(unsigned char);
+	cout << "malloc Size: " << mallocSize << endl;
+	//set device and malloc data space
+	try{
+		gpuStatus = cudaSetDevice(0);
+		if (gpuStatus != cudaSuccess) {
+			throw("cudaSetDevice failed");
+		}
+		cout << "cudaSetDevice was a success" << endl << endl;
+		//malloc space for originalImage.data
+		gpuStatus = cudaMalloc((void**)&orig, mallocSize);
+		if (gpuStatus != cudaSuccess) {
+			throw("cudaMalloc gpuOriginal failed");
+		}
+		cout << "cudaMalloc gpuOriginal was a success" << endl << endl;
+		//malloc space for modifiedImage.data
+		gpuStatus = cudaMalloc((void**)&modif, mallocSize);
+		if (gpuStatus != cudaSuccess) {
+			throw("cudaMalloc gpuModified failed");
+		}
+		cout << "cudaMalloc gpuModified was a success" << endl << endl;
+	}
+	catch (char* errMsg) {
+		cout << "Error: " << errMsg << endl << endl;
+		cleanGPU(orig, modif);
+	}
+
+	return gpuStatus;
+}
+cudaError_t copyToGPU(unsigned char* gpuData, unsigned char* cpuData, int width, int height) {
+	cudaError_t copySucess = cudaSuccess;
+	int cpySize = width * height * sizeof(unsigned char);
+	cout << "Copy Size: "<<cpySize << endl;
+
+	copySucess = cudaMemcpy(gpuData, cpuData, cpySize, cudaMemcpyHostToDevice);
+	if (copySucess != cudaSuccess) {
+		cout << "Error: cudaMemcpy failed" << endl << endl;
+	}
+	return copySucess;
+}
+void cleanGPU(unsigned char** orig, unsigned char** modif) {
+	
+	cudaError_t cleanStatus;
+	
+	cleanStatus = cudaFree(&orig);
+	if (cleanStatus == cudaSuccess) {
+		cout << "Origial Data was freed from the GPU" << endl;
+	}
+	cleanStatus = cudaFree(modif);
+	if (cleanStatus == cudaSuccess) {
+		cout << "Modified Data was freed from the GPU" << endl;
+	}
 }
