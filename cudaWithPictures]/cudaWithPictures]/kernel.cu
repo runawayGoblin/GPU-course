@@ -140,7 +140,7 @@ void onTrack(int, void* ) {
 		cout << "nopeA" << endl;
 	}
 	
-	cout << "threshold: " << thresholdSlider << endl;
+	//cout << "threshold: " << thresholdSlider << endl;
 
 	gpuStatus = cudaDeviceSynchronize();
 	if (gpuStatus != cudaSuccess){
@@ -222,11 +222,16 @@ cudaError_t copyToCPU(unsigned char* gpuData, unsigned char* cpuData, int width,
 	int copySize = width * height * sizeof(unsigned char);
 	//cout << "Copy To CPU Size: " << copySize << endl;
 	
+	unsigned char* cpuOrig = cpuData;
 	//copy data of the modified image from the gpu back to the gpu
 	copySuccess = cudaMemcpy(cpuData, gpuData, copySize, cudaMemcpyDeviceToHost);
 	if (copySuccess != cudaSuccess) {
 		cout << "Error: cudaMemcpy Gpu to Cpu failed" << endl << endl;
 	}
-
+	cout << "a" << endl;
+	if (cpuOrig != cpuData) {
+		cout << "Copy to CPU Worked at Threshold " << thresholdSlider << endl;
+	}
+	cout << "b"<< endl;
 	return copySuccess;
 }
