@@ -20,8 +20,8 @@ void cleanGPU(unsigned char* orig, unsigned char*);
 cudaError_t copyToGPU(unsigned char* gpuData, unsigned char* cpuData, int width, int height);
 cudaError_t copyToCPU(unsigned char* gpuData, unsigned char* cpuData, int width, int height);
 void onTrack(int thr, void* pt);
-
-void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, UBYTE* ker, int kw, int kh, UBYTE* temp);
+void onTrackBar(int t, void* pt);
+void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, int* ker, int kw, int kh);
 
 __global__ void gpuThresholdKernel(unsigned char* gpuOrig, unsigned char* gpuModif, int sizeArr, int threshold) {
 	//loop, compare threshold, change vals
@@ -46,7 +46,13 @@ Mat cpuOriginalImage;
 Mat cpuModifImage;
 int height;
 int width;
+int kHeight;
+int kWidth;
 int thresholdSlider = 195;
+HighPrecisionTime hpt;
+int K[] = { 1,1,1, 1,1,1, 1,1,1};
+float boxSum = 0.0;
+int boxTimes = 0;
 
 int main(int argc, char** argv) {
 	
@@ -115,23 +121,33 @@ int main(int argc, char** argv) {
 	}
 	*/ 
 
-	HighPrecisionTime hpt;
-	
-	UBYTE K[] = { 1,1,1,1,1,1,1,1,1 };
 	cpuModifImage = cpuOriginalImage.clone();
-	Mat cpuTemp = cpuOriginalImage.clone();
+	Mat temp = cpuOriginalImage.clone();
 
+	//TESTING FLIPPED KERNEL
+	/*int k2[] = { -1, -2, -1, 0, 0, 0, 1, 2, 1 };
+	imshow("dispaly", cpuOriginalImage);
+	waitKey(0);
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K, kHeight, kHeight);
+	imshow("dispaly", cpuModifImage);
+	waitKey(0);
+	BoxFilter(cpuOriginalImage.data, temp.data, width, height, k2, kHeight, kHeight);
+	imshow("dispaly", temp);
+	waitKey(0);
+	temp= temp + cpuModifImage;
+	imshow("dispaly", temp);
+	waitKey(0);
+*/
 	namedWindow("Display Window", WINDOW_NORMAL);
 	imshow("Display Window", cpuOriginalImage);
 	waitKey(0);
-	hpt.TimeSinceLastCall();
-	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K, 3, 3, cpuTemp.data);
-	cout << "BoxFilter took " <<  hpt.TimeSinceLastCall() << " seconds" << endl;
-	imshow("Display Window", cpuModifImage);
-	//createTrackbar("Slider", "Display Window", &thresholdSlider, 255, onTrack);
-	//onTrack(thresholdSlider, 0);
+	createTrackbar("Slider", "Display Window", &thresholdSlider, 255, onTrackBar);
+	onTrackBar(thresholdSlider, 0);
 
 	waitKey(0);
+	cout << endl << "IMGAGE SIZE: " << width << " * " << height << endl;
+	cout << "KERNEL SIZE: 9" << endl;
+	cout << "AVGERAGE TIME: " << boxSum / boxTimes << endl;
 	//cleanGPU(gpuOriginalImage, gpuModifiedImage);
 	return 0;
 }
@@ -177,6 +193,26 @@ void onTrack(int, void* ) {
 	}
 	//cout << "cudaMemcpu to Cpu Worked" << endl << endl;
 	imshow("Display Window", cpuOriginalImage);
+}
+void onTrackBar(int t, void* pt) {
+	cout << "in track bar" << endl;
+	//update num times box filter was ran
+	boxTimes++;
+	//start timer before box filter call
+	hpt.TimeSinceLastCall();
+
+	//run box filter
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K, 3, 3);
+
+	//find how long last iteration took
+	float timeSinceLast = hpt.TimeSinceLastCall();
+	cout << "Iteration " << boxTimes << ": " << timeSinceLast << "Second" << endl;
+	//find the average box filter time
+	boxSum += timeSinceLast;
+	cout << "Average Time:" << boxSum / boxTimes << " seconds" << endl<<endl;
+
+	imshow("Display Window", cpuModifImage);
+
 }
 cudaError_t mallocGPU(unsigned char** orig, unsigned char** modif, int width, int height) {
 	
@@ -258,42 +294,45 @@ cudaError_t copyToCPU(unsigned char* gpuData, unsigned char* cpuData, int width,
 	return copySuccess;
 }
 
-void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, UBYTE* ker, int kw, int kh, UBYTE* temp) {
+void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, int* ker, int kw, int kh) {
 
 	//this is bluring i thinhk, so yeah
 	int runSum = 0;
-	int kTimes = kw * kh;
+	int kSum = 0;
+	for (int i = 0; i < kw * kh; i++) {
+		kSum += ker[i];
+	}
+	int hEdge = kh / 2;
+	int wEdge = kw / 2 ;
 	// step through the entire image, every pixel
-	for (int sH = 1; sH < height -1; sH++) {
-		for (int sW = 1; sW < width-1; sW++) {
+	for (int sH = hEdge; sH < height - hEdge; sH++) {
+		for (int sW = wEdge; sW < width - wEdge; sW++) {
 			//cout << width << "(" << sH << "," << sW << ")" << endl;
 			//at each pixel grab the 8 surrounding pixel 
 			//if the pixel is in the middle of the image and has no restrictions
 				//top left
 			int pos = sH*width + sW;
-
-				runSum += src[pos - width - 1] * ker[0];
+			for (int i = 0; i < kw * kh; i++) {
+				kSum += ker[i];//increment the denominator
+				//POS in kernel MOD kernel width - wedge (max number of spaces to move)	
+				int x = ((i% kw) - wEdge);//how many times we move over
+				//POS in kernel DIV kernal height - hedge(max num spaces to move up or down
+				int y =((i/kw) - hEdge); 
+					y = width * y;// will aways be negative bc y is neg
+				runSum += src[pos + x +y] * ker[i];
 				//top middle
-				runSum += src[pos - width ] * ker[1];
-				//top right
-				runSum += src[pos-width +1 ] * ker[2];
-				//immediate left
-				runSum += src[pos-1] * ker[3];
-				//pixPos
-				runSum += src[pos] * ker[4];
-				//immediate left
-				runSum += src[pos +1] * ker[5];
-				//bottom left
-				runSum += src[pos +width - 1]* ker[6];
-				//bottom middle
-				runSum += src[pos + width] * ker[7];
-				//bottom right
-				runSum += src[pos +width +1] *ker[8];
-
-				//add all the surrounding values and then divide my num values to get concentration of blur
-				//cout << sW *sH << "of " << width * height << endl;
-				des[pos] = int((float)runSum / (float)kTimes);
+			
+			}
+			//add all the surrounding values and then divide my num values to get concentration of blur
+			//cout << sW *sH << "of " << width * height << endl;
+			if (kSum != 0.0) {
+				des[pos] = int((float)runSum / (float)kSum);
 				runSum = 0;
+			}
+			else {
+				des[pos] = int((float)runSum / 1.0f);
+				runSum = 0;
+			}
 		}
 	}
 
