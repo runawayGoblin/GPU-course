@@ -51,9 +51,9 @@ int kWidth;
 int thresholdSlider = 195;
 HighPrecisionTime hpt;
 int K3[] = { 1,1,1, 1,1,1, 1,1,1};
-int K5[] = { 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1 };
-int K11[] = { 1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1 };
-int K19[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 };
+int K5[] = { 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1,  1,1,1,1,1,   1,1,1,1,1, };
+int K11[11*11] = {  };
+int K19[19*19] = {  };
 float boxSum = 0.0;
 int boxTimes = 0;
 
@@ -126,6 +126,13 @@ int main(int argc, char** argv) {
 
 	cpuModifImage = cpuOriginalImage.clone();
 	Mat temp = cpuOriginalImage.clone();
+
+	for (int i = 0; i < (11 * 11); i++) {
+		K11[i] = 1;
+	}
+	for (int i = 0; i < (19 * 19); i++) {
+		K19[i] = 1;
+	}
 
 	//TESTING FLIPPED KERNEL
 	/*int k2[] = { -1, -2, -1, 0, 0, 0, 1, 2, 1 };
@@ -205,7 +212,18 @@ void onTrackBar(int t, void* pt) {
 	hpt.TimeSinceLastCall();
 
 	//run box filter
-	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K11,11, 11);
+	//BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K3,3, 3);
+
+	//waitKey(0);
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K5, 5, 5);
+
+	waitKey(0);
+	
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K11, 11, 11);
+
+
+	//waitKey(0);
+	//BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K19, 19, 19);
 
 	//find how long last iteration took
 	float timeSinceLast = hpt.TimeSinceLastCall();
@@ -315,7 +333,7 @@ void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, int* ker, int kw, 
 				//top left
 			pos = sH*width + sW;
 			for (int i = 0; i < kw * kh; i++) {
-				kSum += ker[i];//increment the denominator
+				kSum += ker[i];//increment the denominator (???)WOULD seperatea loop outside (run once) be more efficient(???)
 				//POS in kernel MOD kernel width - wedge (max number of spaces to move)	
 				int x = ((i% kw) - wEdge);//how many times we move over
 				//POS in kernel DIV kernal height - hedge(max num spaces to move up or down
@@ -337,7 +355,7 @@ void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, int* ker, int kw, 
 				des[pos] = int((float)runSum / 1.0f);
 				runSum = 0;
 			}
-			kSum = 0;
+			kSum = 0;//set kSum back to 0 or else the divisions would be too small, it would be 0
 		}
 	}
 
