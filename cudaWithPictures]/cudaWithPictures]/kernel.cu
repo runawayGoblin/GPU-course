@@ -50,7 +50,10 @@ int kHeight;
 int kWidth;
 int thresholdSlider = 195;
 HighPrecisionTime hpt;
-int K[] = { 1,1,1, 1,1,1, 1,1,1};
+int K3[] = { 1,1,1, 1,1,1, 1,1,1};
+int K5[] = { 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1 };
+int K11[] = { 1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1,1 };
+int K19[] = { 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1 };
 float boxSum = 0.0;
 int boxTimes = 0;
 
@@ -202,7 +205,7 @@ void onTrackBar(int t, void* pt) {
 	hpt.TimeSinceLastCall();
 
 	//run box filter
-	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K, 3, 3);
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K11,11, 11);
 
 	//find how long last iteration took
 	float timeSinceLast = hpt.TimeSinceLastCall();
@@ -299,9 +302,8 @@ void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, int* ker, int kw, 
 	//this is bluring i thinhk, so yeah
 	int runSum = 0;
 	int kSum = 0;
-	for (int i = 0; i < kw * kh; i++) {
-		kSum += ker[i];
-	}
+	
+	int pos = 0;
 	int hEdge = kh / 2;
 	int wEdge = kw / 2 ;
 	// step through the entire image, every pixel
@@ -311,7 +313,7 @@ void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, int* ker, int kw, 
 			//at each pixel grab the 8 surrounding pixel 
 			//if the pixel is in the middle of the image and has no restrictions
 				//top left
-			int pos = sH*width + sW;
+			pos = sH*width + sW;
 			for (int i = 0; i < kw * kh; i++) {
 				kSum += ker[i];//increment the denominator
 				//POS in kernel MOD kernel width - wedge (max number of spaces to move)	
@@ -325,14 +327,17 @@ void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, int* ker, int kw, 
 			}
 			//add all the surrounding values and then divide my num values to get concentration of blur
 			//cout << sW *sH << "of " << width * height << endl;
-			if (kSum != 0.0) {
+			if (kSum != 0) {
+				//cout << "A:(" << sH << "," << sW << "): " << runSum << "  :  " << kSum << "  :  "  <<int((float)runSum / (float)kSum) << endl;
 				des[pos] = int((float)runSum / (float)kSum);
 				runSum = 0;
 			}
 			else {
+				//cout << "B:(" << sH << "," << sW << "): " << int((float)runSum / 1.0f) << endl;
 				des[pos] = int((float)runSum / 1.0f);
 				runSum = 0;
 			}
+			kSum = 0;
 		}
 	}
 
