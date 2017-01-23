@@ -22,7 +22,7 @@ cudaError_t copyToCPU(unsigned char* gpuData, unsigned char* cpuData, int width,
 void onTrack(int thr, void* pt);
 void onTrackBar(int t, void* pt);
 void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, int* ker, int kw, int kh);
-
+bool runGPUboxFilter();
 __global__ void gpuThresholdKernel(unsigned char* gpuOrig, unsigned char* gpuModif, int sizeArr, int threshold) {
 	//loop, compare threshold, change vals
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -37,6 +37,59 @@ __global__ void gpuThresholdKernel(unsigned char* gpuOrig, unsigned char* gpuMod
 	}
 
 
+
+}
+__constant__ int gpuKernelHeight;
+__constant__ int gpuKernelWidth;
+__constant__ int gpuKernel[9];
+
+__global__ void gpuBoxFilter(UBYTE* src, UBYTE* des, int width, int height) {
+	//GET THE INDEX
+	int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+
+	//CHECK if in bounds
+	if (index < height && index < width) {
+		int runSum = 0;
+		int kSum = 0;
+
+		int pos = 0;
+		int hEdge = gpuKernelHeight / 2;
+		int wEdge = gpuKernelWidth / 2;
+		for (int i = 0; i < gpuKernelWidth * gpuKernelHeight; i++) {
+			kSum += gpuKernel[i];//increment the denominator (???)WOULD seperatea loop outside (run once) be more efficient(???)
+		}
+
+		// step through the entire image, every pixel
+		for (int sH = hEdge; sH < height - hEdge; sH++) {
+			for (int sW = wEdge; sW < width - wEdge; sW++) {
+				//at each pixel grab the kernelSize-1 surrounding pixel 
+				//if the pixel is in the middle of the image and has no restrictions
+				pos = sH*width + sW; //get the pos in the picter the pixel is at
+				for (int i = 0; i < gpuKernelWidth * gpuKernelHeight; i++) {
+					//POS in kernel MOD kernel width - wedge (max number of spaces to move)	
+					int x = ((i% gpuKernelWidth) - wEdge);//how many times we move over
+					//POS in kernel DIV kernal height - hedge(max num spaces to move up or down
+					int y = ((i / gpuKernelWidth) - hEdge);//how many times we move up
+
+					y = width * y;// will aways be negative if y is neg & always pos if y is pos
+					runSum += src[pos + x + y] * gpuKernel[i];
+					//top middle
+
+				}
+				//add all the surrounding values and then divide my num values to get concentration of blur
+				if (kSum != 0) {
+					des[pos] =int((float)runSum / (float)kSum);
+					runSum = 0;
+				}
+				else {
+					des[pos] = int((float)runSum / 1.0f);
+					runSum = 0;
+				}
+				kSum = 0;//set kSum back to 0 or else the divisions would be too small, it would be 0, nothing would work
+			}
+		}
+	}
 
 }
 //global vars
@@ -54,8 +107,11 @@ int K3[] = { 1,1,1, 1,1,1, 1,1,1};
 int K5[] = { 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1,  1,1,1,1,1,   1,1,1,1,1, };
 int K11[11*11] = {  };
 int K19[19*19] = {  };
-float boxSum = 0.0;
-int boxTimes = 0;
+float sumCPU = 0.0;
+int timesCPU = 0;
+float sumGPU = 0.0;
+int timesGPU = 0;
+
 
 int main(int argc, char** argv) {
 	
@@ -124,16 +180,8 @@ int main(int argc, char** argv) {
 	}
 	*/ 
 
-	cpuModifImage = cpuOriginalImage.clone();
-	Mat temp = cpuOriginalImage.clone();
-
-	for (int i = 0; i < (11 * 11); i++) {
-		K11[i] = 1;
-	}
-	for (int i = 0; i < (19 * 19); i++) {
-		K19[i] = 1;
-	}
-
+	
+	
 	//TESTING FLIPPED KERNEL
 	/*int k2[] = { -1, -2, -1, 0, 0, 0, 1, 2, 1 };
 	imshow("dispaly", cpuOriginalImage);
@@ -148,16 +196,57 @@ int main(int argc, char** argv) {
 	imshow("dispaly", temp);
 	waitKey(0);
 */
+	
+	//TEST ALL the different variables(sizes) of kernel
+/*	
+	Mat temp = cpuOriginalImage.clone();
+	for (int i = 0; i < (11 * 11); i++) {
+		K11[i] = 1;
+	}
+	for (int i = 0; i < (19 * 19); i++) {
+		K19[i] = 1;
+	}
+	*/
+	cpuModifImage = cpuOriginalImage.clone();
 	namedWindow("Display Window", WINDOW_NORMAL);
-	imshow("Display Window", cpuOriginalImage);
+	imshow("Display Window", cpuModifImage);//show original image
 	waitKey(0);
-	createTrackbar("Slider", "Display Window", &thresholdSlider, 255, onTrackBar);
-	onTrackBar(thresholdSlider, 0);
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K3, 3, 3);
+	imshow("Display Window", cpuModifImage);//show modified img
+	waitKey(0);
+	//set modified image back to original so you know there will be a change
+	cpuModifImage = cpuOriginalImage.clone();
 
+	/*
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K5, 5, 5);
+	imshow("Display Window", cpuModifImage);
 	waitKey(0);
-	cout << endl << "IMGAGE SIZE: " << width << " * " << height << endl;
-	cout << "KERNEL SIZE: 9" << endl;
-	cout << "AVGERAGE TIME: " << boxSum / boxTimes << endl;
+
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K11, 11, 11);
+
+	imshow("Display Window", cpuModifImage);
+	waitKey(0);
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K19, 19, 19);
+*/
+
+	
+	imshow("Display Window", cpuModifImage);// will show the modified image
+	waitKey(0);// show orig again
+	//createTrackbar("Slider", "Display Window", &thresholdSlider, 255, onTrackBar);
+	//onTrackBar(thresholdSlider, 0);
+	//waitKey(0);
+
+	if (runGPUboxFilter()) {
+		imshow("Display Window", cpuModifImage);
+		waitKey(0);
+		cout << endl << "IMGAGE SIZE: " << width << " * " << height << endl;
+		cout << "KERNEL SIZE: 9" << endl;
+		cout << "AVGERAGE CPU TIME: " << sumCPU / timesCPU << endl;
+		cout << "AVERAGE GPU TIME: " << sumGPU / timesGPU << endl <<endl;
+	}
+	else {
+		cout << "GPU failed to run correctly" << endl;
+	}
 	//cleanGPU(gpuOriginalImage, gpuModifiedImage);
 	return 0;
 }
@@ -207,14 +296,14 @@ void onTrack(int, void* ) {
 void onTrackBar(int t, void* pt) {
 	cout << "in track bar" << endl;
 	//update num times box filter was ran
-	boxTimes++;
+	timesCPU++;
 	//start timer before box filter call
 	hpt.TimeSinceLastCall();
 
-	//run box filter
-	//BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K3,3, 3);
+	//run box filtertimesCPU
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K3,3, 3);
 
-	//waitKey(0);
+	waitKey(0);
 	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K5, 5, 5);
 
 	waitKey(0);
@@ -222,15 +311,15 @@ void onTrackBar(int t, void* pt) {
 	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K11, 11, 11);
 
 
-	//waitKey(0);
-	//BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K19, 19, 19);
+	waitKey(0);
+	BoxFilter(cpuOriginalImage.data, cpuModifImage.data, width, height, K19, 19, 19);
 
 	//find how long last iteration took
 	float timeSinceLast = hpt.TimeSinceLastCall();
-	cout << "Iteration " << boxTimes << ": " << timeSinceLast << "Second" << endl;
+	cout << "Iteration " << timesCPU << ": " << timeSinceLast << "Second" << endl;
 	//find the average box filter time
-	boxSum += timeSinceLast;
-	cout << "Average Time:" << boxSum / boxTimes << " seconds" << endl<<endl;
+	sumCPU += timeSinceLast;
+	cout << "Average Time:" << sumCPU / timesCPU << " seconds" << endl<<endl;
 
 	imshow("Display Window", cpuModifImage);
 
@@ -299,13 +388,13 @@ void cleanGPU(unsigned char* orig, unsigned char* modif) {
 cudaError_t copyToCPU(unsigned char* gpuData, unsigned char* cpuData, int width, int height) {
 	cudaError_t copySuccess= cudaSuccess;
 	int copySize = width * height * sizeof(unsigned char);
-	//cout << "Copy To CPU Size: " << copySize << endl;
+	cout << "Copy To CPU Size: " << copySize << endl;
 	
 	unsigned char* cpuOrig = cpuData;
 	//copy data of the modified image from the gpu back to the gpu
 	copySuccess = cudaMemcpy(cpuData, gpuData, copySize, cudaMemcpyDeviceToHost);
 	if (copySuccess != cudaSuccess) {
-		cout << "Error: cudaMemcpy Gpu to Cpu failed" << endl << endl;
+		cout << "~\n ~\nError: cudaMemcpy Gpu to Cpu failed~\n ~" << endl << endl;
 	}
 	cout << "a" << endl;
 	if (cpuOrig != cpuData) {
@@ -362,4 +451,74 @@ void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, int* ker, int kw, 
 
 
 
+}
+bool runGPUboxFilter() {
+	bool retval = true;
+
+	try {
+		cudaError_t gpuStatus = mallocGPU(&gpuOriginalImage, &gpuModifiedImage, width, height);
+		if (gpuStatus != cudaSuccess) {
+			throw("Malloc GPU Failed");
+		}
+		if (gpuOriginalImage == nullptr) {
+			throw("gpuOriginalImage is null after malloc");
+		}
+		if (gpuModifiedImage == nullptr) {
+			throw("gpuModifiedImage is null after malloc");
+		}
+		cout << "gpuMalloc was a success" << endl << endl;
+			
+		//copy the cpu image data to the gpu
+		gpuStatus = copyToGPU(gpuOriginalImage, cpuOriginalImage.data, width, height);
+		if (gpuStatus != cudaSuccess) {
+			throw("Copy to GPU Failed");
+		}
+		cout << "cudaMemcpy cpuImg to gpuOrig Worked" << endl << endl;
+		
+
+		//send kernel and kernel size to the gpu constant memory
+		if (cudaMemcpyToSymbol(gpuKernelHeight, &kHeight, sizeof(int)) != cudaSuccess) {
+			throw("cudaMemcpyToSymbol kernelHeight failed");
+		}
+		cout << "cudaMemcpyToSymbol kernelHeight worked" << endl;
+
+		if (cudaMemcpyToSymbol(gpuKernelWidth, &kWidth, sizeof(int)) != cudaSuccess) {
+			throw("cudaMemcpyToSymbol kernelWidth failed");
+		}
+		cout << "cudaMemcpyToSymbol kernelWidth worked" << endl;
+		if (cudaMemcpyToSymbol(gpuKernel, &K3, sizeof(int)*9) != cudaSuccess) {
+			throw("cudaMemcpyToSymbol kernelHeight failed");
+		}
+		cout << "cudaMemcpyToSymbol K3 worked" << endl;
+
+
+
+		////update the image with the threshold
+		int numBlocks = (1023 + width * height) / 1024;
+		gpuBoxFilter <<<numBlocks, 1024 >>> (gpuOriginalImage, gpuModifiedImage, width, height);
+		cudaDeviceSynchronize();
+		//time(??)
+		gpuStatus = cudaGetLastError();
+		if (gpuStatus != cudaSuccess) {
+			throw("Kernel Failed");
+		}
+		//cout << "Kernel Worked" << endl << endl;
+
+
+		//copy back to cpu
+		gpuStatus = copyToCPU(gpuModifiedImage, cpuModifImage.data, width, height);
+		if (gpuStatus != cudaSuccess) {
+			throw("Copy to GPU Failed");
+		}
+		cout << "cudaMemcpu to Cpu Worked" << endl << endl;
+
+
+
+	}
+	catch (char* err) {
+		cleanGPU(gpuOriginalImage, gpuModifiedImage);
+		retval = false;
+	}
+
+	return retval;
 }
