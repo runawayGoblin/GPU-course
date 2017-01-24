@@ -39,54 +39,50 @@ __global__ void gpuThresholdKernel(unsigned char* gpuOrig, unsigned char* gpuMod
 
 
 }
-__constant__ int gpuKernelHeight;
-__constant__ int gpuKernelWidth;
+__constant__ int gpuSum;
 __constant__ int gpuKernel[9];
 
-__global__ void gpuBoxFilter(UBYTE* src, UBYTE* des, int width, int height) {
+__global__ void gpuBoxFilter(UBYTE* src, UBYTE* des, int picWidth, int picHeight,  int kw, int kh) {
 	//GET THE INDEX
-	int index = blockIdx.x * blockDim.x + threadIdx.x;
+	int indX = blockIdx.x * blockDim.x + threadIdx.x; 
+	int indY = blockIdx.y * blockDim.y + threadIdx.y;
 
-
+	int pos = indY * picWidth + indX;
 	//CHECK if in bounds
-	if (index < height && index < width) {
+	if (indX >= picWidth || indY >= picHeight) {
 		int runSum = 0;
-		int kSum = 0;
+		
 
-		int pos = 0;
-		int hEdge = gpuKernelHeight / 2;
-		int wEdge = gpuKernelWidth / 2;
-		for (int i = 0; i < gpuKernelWidth * gpuKernelHeight; i++) {
-			kSum += gpuKernel[i];//increment the denominator (???)WOULD seperatea loop outside (run once) be more efficient(???)
-		}
-
+		//int pos = 0;
+		int hEdge = kh / 2;
+		int wEdge = kw / 2;
+		
 		// step through the entire image, every pixel
-		for (int sH = hEdge; sH < height - hEdge; sH++) {
-			for (int sW = wEdge; sW < width - wEdge; sW++) {
+		for (int sH = hEdge; sH < picHeight - hEdge; sH++) {
+			for (int sW = wEdge; sW < picWidth - wEdge; sW++) {
 				//at each pixel grab the kernelSize-1 surrounding pixel 
 				//if the pixel is in the middle of the image and has no restrictions
-				pos = sH*width + sW; //get the pos in the picter the pixel is at
-				for (int i = 0; i < gpuKernelWidth * gpuKernelHeight; i++) {
+				pos = sH*picWidth + sW; //get the pos in the picter the pixel is at
+				for (int i = 0; i < kw * kh; i++) {
 					//POS in kernel MOD kernel width - wedge (max number of spaces to move)	
-					int x = ((i% gpuKernelWidth) - wEdge);//how many times we move over
+					int x = ((i% kw) - wEdge);//how many times we move over
 					//POS in kernel DIV kernal height - hedge(max num spaces to move up or down
-					int y = ((i / gpuKernelWidth) - hEdge);//how many times we move up
+					int y = ((i / kw) - hEdge);//how many times we move up
 
-					y = width * y;// will aways be negative if y is neg & always pos if y is pos
+					y = picWidth * y;// will aways be negative if y is neg & always pos if y is pos
 					runSum += src[pos + x + y] * gpuKernel[i];
 					//top middle
 
 				}
 				//add all the surrounding values and then divide my num values to get concentration of blur
-				if (kSum != 0) {
-					des[pos] =int((float)runSum / (float)kSum);
+				if (gpuSum != 0) {
+					des[pos] = (sH * 20) % 2 ? 255 : 0;//int((float)runSum / (float)gpuSum);
 					runSum = 0;
 				}
 				else {
-					des[pos] = int((float)runSum / 1.0f);
+					des[pos] = (sH * 20) % 2 ? 255 : 0;// int((float)runSum / 1.0f);
 					runSum = 0;
 				}
-				kSum = 0;//set kSum back to 0 or else the divisions would be too small, it would be 0, nothing would work
 			}
 		}
 	}
@@ -99,8 +95,8 @@ Mat cpuOriginalImage;
 Mat cpuModifImage;
 int height;
 int width;
-int kHeight;
-int kWidth;
+int kHeight =3;
+int kWidth =3;
 int thresholdSlider = 195;
 HighPrecisionTime hpt;
 int K3[] = { 1,1,1, 1,1,1, 1,1,1};
@@ -454,7 +450,7 @@ void BoxFilter(UBYTE* src, UBYTE* des, int width, int height, int* ker, int kw, 
 }
 bool runGPUboxFilter() {
 	bool retval = true;
-
+	
 	try {
 		cudaError_t gpuStatus = mallocGPU(&gpuOriginalImage, &gpuModifiedImage, width, height);
 		if (gpuStatus != cudaSuccess) {
@@ -475,18 +471,19 @@ bool runGPUboxFilter() {
 		}
 		cout << "cudaMemcpy cpuImg to gpuOrig Worked" << endl << endl;
 		
+		
+		int sum = 0;
+		for (int i = 0; i < kWidth * kHeight; i++) {
+			sum += K3[i];
+		}
 
 		//send kernel and kernel size to the gpu constant memory
-		if (cudaMemcpyToSymbol(gpuKernelHeight, &kHeight, sizeof(int)) != cudaSuccess) {
+		if (cudaMemcpyToSymbol(gpuSum, &sum, sizeof(int), 0, cudaMemcpyHostToDevice) != cudaSuccess) { // doesn't change the gpuKernelHeight value to kHeight
 			throw("cudaMemcpyToSymbol kernelHeight failed");
 		}
-		cout << "cudaMemcpyToSymbol kernelHeight worked" << endl;
-
-		if (cudaMemcpyToSymbol(gpuKernelWidth, &kWidth, sizeof(int)) != cudaSuccess) {
-			throw("cudaMemcpyToSymbol kernelWidth failed");
-		}
-		cout << "cudaMemcpyToSymbol kernelWidth worked" << endl;
-		if (cudaMemcpyToSymbol(gpuKernel, &K3, sizeof(int)*9) != cudaSuccess) {
+		cout << "cudaMemcpyToSymbol  worked" << endl;
+	
+		if (cudaMemcpyToSymbol(*gpuKernel, K3, sizeof(int)*9, 0, cudaMemcpyHostToDevice) != cudaSuccess) {
 			throw("cudaMemcpyToSymbol kernelHeight failed");
 		}
 		cout << "cudaMemcpyToSymbol K3 worked" << endl;
@@ -495,8 +492,17 @@ bool runGPUboxFilter() {
 
 		////update the image with the threshold
 		int numBlocks = (1023 + width * height) / 1024;
-		gpuBoxFilter <<<numBlocks, 1024 >>> (gpuOriginalImage, gpuModifiedImage, width, height);
-		cudaDeviceSynchronize();
+		gpuBoxFilter <<<numBlocks, 1024 >>> (gpuOriginalImage, gpuModifiedImage, width, height, kHeight, kWidth);
+
+
+		gpuStatus = cudaGetLastError();
+		if (gpuStatus != cudaSuccess) {
+			throw("Kernel Failed");
+		}
+
+
+		gpuStatus = cudaDeviceSynchronize();
+	
 		//time(??)
 		gpuStatus = cudaGetLastError();
 		if (gpuStatus != cudaSuccess) {
@@ -516,6 +522,7 @@ bool runGPUboxFilter() {
 
 	}
 	catch (char* err) {
+		cout << err << endl;
 		cleanGPU(gpuOriginalImage, gpuModifiedImage);
 		retval = false;
 	}
